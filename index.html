@@ -8,7 +8,7 @@
   <!-- Leaflet (Map) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  <!-- MarkerCluster (Pins clustering) -->
+  <!-- MarkerCluster -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 
@@ -72,10 +72,7 @@
       font-size:12px;
       color:rgba(0,0,0,.78);
     }
-    .dot{
-      width:10px;height:10px;border-radius:999px;background:#999;
-      box-shadow:0 6px 14px rgba(0,0,0,.10);
-    }
+    .dot{width:10px;height:10px;border-radius:999px;background:#999; box-shadow:0 6px 14px rgba(0,0,0,.10);}
     .dot.green{background:#16a34a;}
     .dot.red{background:#ef4444;}
 
@@ -178,6 +175,27 @@
       font-size:12px;
       cursor:pointer;
     }
+    .dangerBtn{
+      border-color: rgba(220,38,38,.30);
+      color:var(--danger);
+      background:rgba(255,255,255,.85);
+    }
+    .mutedBtn{background:rgba(255,255,255,.85);}
+
+    .modeTag{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 10px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.10);
+      background:rgba(255,255,255,.72);
+      font-size:12px;
+      color:rgba(0,0,0,.75);
+    }
+    .modeDot{width:9px;height:9px;border-radius:999px;background:#999;}
+    .modeDot.camera{background:#2563eb;}
+    .modeDot.upload{background:#a16207;}
 
     /* Timeline */
     .timelineWrap{padding:18px;}
@@ -234,29 +252,7 @@
     }
     .tActions{margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;}
     .tActions button{padding:10px 12px; font-size:13px; border-radius:12px;}
-    .dangerBtn{
-      border-color: rgba(220,38,38,.30);
-      color:var(--danger);
-      background:rgba(255,255,255,.85);
-    }
-    .mutedBtn{background:rgba(255,255,255,.85);}
-    .tCard::before{
-      content:"";
-      position:absolute;
-      left:-26px; top:0; bottom:0;
-      width:2px;
-      background:rgba(0,0,0,.08);
-    }
-    .tCard::after{
-      content:"";
-      position:absolute;
-      left:-33px;
-      top:26px;
-      width:16px; height:16px;
-      border-radius:999px;
-      background:#6a4b2f;
-      box-shadow:0 8px 16px rgba(0,0,0,.12);
-    }
+
     .timelineRail{position:relative; padding-left:34px;}
     .timelineRail::before{
       content:"";
@@ -362,6 +358,43 @@
     }
     .profileBtn .name{font-weight:900;}
     .profileBtn .meta{font-size:12px;color:rgba(0,0,0,.55);}
+
+    /* Geo picker modal */
+    .geoModal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:70;
+    }
+    .geoCard{
+      width:min(980px, 96vw);
+      background:rgba(255,255,255,.92);
+      border-radius:18px;
+      overflow:hidden;
+      border:1px solid rgba(0,0,0,.12);
+      box-shadow:0 20px 60px rgba(0,0,0,.25);
+    }
+    .geoHead{
+      display:flex; justify-content:space-between; align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-bottom:1px solid rgba(0,0,0,.08);
+    }
+    .geoHead .title{
+      font-family: ui-serif, Georgia, "Times New Roman", serif;
+      font-weight:900;
+    }
+    .geoBody{padding:14px;}
+    #geoPickMap{
+      height:520px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.08);
+      overflow:hidden;
+      background:#eaeaea;
+    }
   </style>
 </head>
 
@@ -399,7 +432,8 @@
               <button id="startBtn" class="primary">Start Camera</button>
               <button id="flipBtn" class="ghost" disabled>Flip</button>
               <button id="shootBtn" class="primary" disabled>Take 3 Photos</button>
-              <button id="retakeBtn" class="ghost" disabled>Retake</button>
+              <button id="uploadBtn" class="mutedBtn" disabled>Upload 3 Photos</button>
+              <button id="retakeBtn" class="ghost" disabled>Reset</button>
               <button id="downloadBtn" class="primary" disabled>Download</button>
               <button id="printBtn" class="ghost" disabled>Print</button>
             </div>
@@ -420,9 +454,15 @@
         </div>
 
         <div class="side">
-          <div>
-            <div class="panelTitle">Your 3 shots</div>
-            <p class="sub">Download always works. Save-to-Timeline needs unlock (profile PIN).</p>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <div>
+              <div class="panelTitle">Your 3 shots</div>
+              <p class="sub" style="margin:0;">Camera or Upload. Save-to-Timeline needs unlock.</p>
+            </div>
+            <div class="modeTag" id="modeTag">
+              <span id="modeDot" class="modeDot camera"></span>
+              <span id="modeText">Camera</span>
+            </div>
           </div>
 
           <div id="thumbs" class="miniGrid"></div>
@@ -454,12 +494,19 @@
             </div>
 
             <div>
-              <div class="smallLabel">Location label (optional)</div>
+              <div class="smallLabel">Place label</div>
               <input id="placeLabel" placeholder="e.g., DLF Mall / Wedding Venue" />
+            </div>
+
+            <div>
+              <div class="smallLabel">Memory date & time</div>
+              <input id="memoryDate" type="datetime-local" />
+              <div class="hint" id="memoryDateHint" style="margin-top:6px;">Camera memories auto-set this to now. Upload lets you backfill old trips.</div>
             </div>
 
             <div class="row">
               <button id="geoBtn" class="mutedBtn">Get GPS</button>
+              <button id="pickOnMapBtn" class="mutedBtn">Pick on Map</button>
               <span id="geoStatus" class="pill">GPS: not captured</span>
             </div>
 
@@ -472,7 +519,7 @@
 
       <div class="footerNote">
         <span>Local-only vaults. Encrypted on this device.</span>
-        <span>Tip: unlock only for the owner.</span>
+        <span>Upload flow lets you add past memories.</span>
       </div>
     </div>
 
@@ -492,6 +539,8 @@
               <option value="">All people</option>
             </select>
             <input id="searchFilter" placeholder="Search place / caption" />
+
+            <button id="exportMyVaultBtn" class="mutedBtn">Export Vault</button>
             <button id="refreshTimeline" class="mutedBtn">Refresh</button>
             <button id="clearAll" class="dangerBtn">Clear My Vault</button>
           </div>
@@ -526,6 +575,24 @@
     </div>
   </div>
 
+  <!-- Geo picker modal -->
+  <div id="geoModal" class="geoModal">
+    <div class="geoCard">
+      <div class="geoHead">
+        <div class="title">Pick a location</div>
+        <div class="row">
+          <button id="geoPickClear" class="mutedBtn">Clear</button>
+          <button id="geoPickSave" class="primary">Save</button>
+          <button id="geoPickClose" class="mutedBtn">Close</button>
+        </div>
+      </div>
+      <div class="geoBody">
+        <div id="geoPickMap"></div>
+        <div class="hint" style="margin-top:10px;">Click on map to drop a pin. Save to attach it to this memory.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Profile Gate -->
   <div id="gate" class="gate">
     <div class="gateCard">
@@ -543,7 +610,7 @@
           <div class="hint" style="margin-top:-6px;">Tap a profile → enter PIN → unlock timeline.</div>
           <div style="height:10px"></div>
           <div id="profilesGrid" class="profilesGrid"></div>
-          <div id="noProfiles" class="hint" style="display:none; margin-top:10px;">No profiles yet. Create one on the right.</div>
+          <div id="noProfiles" class="hint" style="display:none; margin-top:10px;">No profiles yet. Create or import one.</div>
         </div>
 
         <div class="box">
@@ -565,6 +632,15 @@
           </div>
 
           <div style="height:14px"></div>
+          <div class="panelTitle" style="margin-top:8px;">Import vault</div>
+          <div class="hint" style="margin-top:-6px;">Import your exported file (.vpb.json). Creates a new profile on this device.</div>
+          <div style="height:10px"></div>
+          <div class="row">
+            <button id="importVaultBtn" class="mutedBtn">Import</button>
+            <span id="importMsg" class="hint"></span>
+          </div>
+
+          <div style="height:14px"></div>
           <div class="hint">
             Guest mode: you can still take photos + download/print, but you can’t save or view timeline.
           </div>
@@ -572,6 +648,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Hidden file inputs -->
+  <input id="importFile" type="file" accept=".json,application/json" style="display:none" />
+  <input id="uploadFiles" type="file" accept="image/*" multiple style="display:none" />
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -624,6 +704,15 @@ async function dbPut(storeName, obj){
     tx.objectStore(storeName).put(obj);
     tx.oncomplete = () => resolve(true);
     tx.onerror = () => reject(tx.error);
+  });
+}
+async function dbGet(storeName, id){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const req = tx.objectStore(storeName).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(tx.error);
   });
 }
 async function dbGetAll(storeName){
@@ -680,7 +769,9 @@ function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
 function canvasToDataURL(canvas, quality=0.92){
   return canvas.toDataURL("image/jpeg", quality);
 }
-
+function escapeHtml(s){
+  return (s||"").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+}
 function ab2b64(buf){
   const bytes = new Uint8Array(buf);
   let bin = "";
@@ -744,8 +835,37 @@ async function decryptJSON(aesKey, ivB64, ctB64){
   const txt = new TextDecoder().decode(pt);
   return JSON.parse(txt);
 }
-function escapeHtml(s){
-  return (s||"").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+function b64ApproxBytes(b64){
+  if (!b64) return 0;
+  const pad = (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
+  return Math.max(0, Math.floor((b64.length * 3)/4) - pad);
+}
+function fmtBytes(bytes){
+  const u = ["B","KB","MB","GB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < u.length-1){ v /= 1024; i++; }
+  return `${v.toFixed(i===0?0:1)} ${u[i]}`;
+}
+function safeFileName(s){
+  return (s||"vault").replace(/[^a-z0-9_\-]+/gi, "_").slice(0,60);
+}
+function toLocalDatetimeValue(date){
+  const d = new Date(date);
+  const pad = (n)=>String(n).padStart(2,"0");
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth()+1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+function getMemoryISOFromInput(){
+  const v = (memoryDate.value || "").trim();
+  if (!v) return nowISO();
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return nowISO();
+  return d.toISOString();
 }
 
 /* =========================================================
@@ -768,6 +888,7 @@ const ctxOut = out.getContext('2d');
 const startBtn = document.getElementById('startBtn');
 const flipBtn = document.getElementById('flipBtn');
 const shootBtn = document.getElementById('shootBtn');
+const uploadBtn = document.getElementById('uploadBtn');
 const retakeBtn = document.getElementById('retakeBtn');
 const makeBtn = document.getElementById('makeBtn');
 const downloadBtn = document.getElementById('downloadBtn');
@@ -786,8 +907,15 @@ const datestampSel = document.getElementById('datestamp');
 const peopleInput = document.getElementById("peopleInput");
 const peopleSuggestions = document.getElementById("peopleSuggestions");
 const placeLabel = document.getElementById("placeLabel");
+const memoryDate = document.getElementById("memoryDate");
+const memoryDateHint = document.getElementById("memoryDateHint");
+
+const modeTag = document.getElementById("modeTag");
+const modeDot = document.getElementById("modeDot");
+const modeText = document.getElementById("modeText");
 
 const geoBtn = document.getElementById("geoBtn");
+const pickOnMapBtn = document.getElementById("pickOnMapBtn");
 const geoStatus = document.getElementById("geoStatus");
 let geoData = null;
 
@@ -802,6 +930,7 @@ const mapEl = document.getElementById("map");
 
 const personFilter = document.getElementById("personFilter");
 const searchFilter = document.getElementById("searchFilter");
+const exportMyVaultBtn = document.getElementById("exportMyVaultBtn");
 const refreshTimeline = document.getElementById("refreshTimeline");
 const clearAll = document.getElementById("clearAll");
 const timelineGrid = document.getElementById("timelineGrid");
@@ -823,15 +952,46 @@ const newPin = document.getElementById("newPin");
 const createProfileBtn = document.getElementById("createProfileBtn");
 const createMsg = document.getElementById("createMsg");
 
+const importVaultBtn = document.getElementById("importVaultBtn");
+const importMsg = document.getElementById("importMsg");
+const importFile = document.getElementById("importFile");
+
+/* Upload input */
+const uploadFiles = document.getElementById("uploadFiles");
+
+/* Geo picker modal refs */
+const geoModal = document.getElementById("geoModal");
+const geoPickClose = document.getElementById("geoPickClose");
+const geoPickSave = document.getElementById("geoPickSave");
+const geoPickClear = document.getElementById("geoPickClear");
+
 /* =========================================================
-   Session state (in-memory)
+   Session state (in-memory only)
 ========================================================= */
 let activeProfileId = null;
 let activeProfileName = null;
-let sessionKey = null; // AES-GCM CryptoKey, only when unlocked
+let sessionKey = null;
 
 function isUnlocked(){
   return !!(activeProfileId && sessionKey);
+}
+
+let captureMode = "camera"; // "camera" | "upload"
+function setMode(mode){
+  captureMode = mode;
+  if (mode === "camera"){
+    modeDot.className = "modeDot camera";
+    modeText.textContent = "Camera";
+    memoryDate.value = toLocalDatetimeValue(new Date());
+    memoryDate.disabled = true;
+    memoryDateHint.textContent = "Camera memories auto-set this to now. Upload lets you backfill old trips.";
+  } else {
+    modeDot.className = "modeDot upload";
+    modeText.textContent = "Upload";
+    memoryDate.disabled = false;
+    if (!memoryDate.value) memoryDate.value = toLocalDatetimeValue(new Date());
+    memoryDateHint.textContent = "Upload mode: set the real date/time from the past trip.";
+  }
 }
 
 function setSessionUI(){
@@ -840,6 +1000,10 @@ function setSessionUI(){
     sessionText.textContent = `${activeProfileName} (unlocked)`;
     lockBtn.style.display = "";
     tabTimeline.disabled = false;
+
+    uploadBtn.disabled = false;            // upload allowed only when unlocked
+    pickOnMapBtn.disabled = false;
+
     saveBtn.disabled = (out.style.display === "none") ? true : false;
     saveBtn.textContent = "Save to Timeline";
     saveHint.textContent = (out.style.display === "none") ? "Generate output first. Then save." : "Ready. Save this memory to your timeline.";
@@ -848,6 +1012,10 @@ function setSessionUI(){
     sessionText.textContent = "Guest (locked)";
     lockBtn.style.display = "none";
     tabTimeline.disabled = true;
+
+    uploadBtn.disabled = true;             // lock upload in guest
+    pickOnMapBtn.disabled = true;
+
     saveBtn.disabled = true;
     saveBtn.textContent = "Save to Timeline (Locked)";
     saveHint.textContent = "Generate output first. Then unlock to save.";
@@ -855,78 +1023,86 @@ function setSessionUI(){
 }
 
 /* =========================================================
-   HARD RESET (prevents visual leaks across users)
+   Map (timeline) + heat
 ========================================================= */
-function stopCamera(){
+let mapInstance = null;
+let clusterLayer = null;
+let heatLayer = null;
+let mapBuilt = false;
+
+function clearMapLayers(){
+  if (!mapInstance) return;
   try{
-    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (clusterLayer && mapInstance.hasLayer(clusterLayer)) mapInstance.removeLayer(clusterLayer);
   }catch(_){}
-  stream = null;
-  try{ video.srcObject = null; }catch(_){}
-  startBtn.disabled = false;
-  startBtn.textContent = "Start Camera";
-  flipBtn.disabled = true;
-  shootBtn.disabled = true;
-  retakeBtn.disabled = true;
+  try{
+    if (heatLayer && mapInstance.hasLayer(heatLayer)) mapInstance.removeLayer(heatLayer);
+  }catch(_){}
+  try{ if (clusterLayer) clusterLayer.clearLayers(); }catch(_){}
+  heatLayer = null;
 }
+function ensureMap(){
+  if (mapBuilt) return;
+  mapBuilt = true;
 
-function hardResetBoothUI(){
-  // Hide any generated output (no one should see previous person's card)
-  out.style.display = "none";
-  video.style.display = "block";
+  mapInstance = L.map(mapEl, { zoomControl:true }).setView([20.5937, 78.9629], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap"
+  }).addTo(mapInstance);
 
-  // Clear shots + thumbs
-  shots = [];
-  thumbs.innerHTML = "";
-
-  // Clear all identity fields
-  captionInp.value = "";
-  peopleInput.value = "";
-  placeLabel.value = "";
-
-  // Clear GPS state
-  geoData = null;
-  geoStatus.textContent = "GPS: not captured";
-
-  // Disable actions until new photos are taken
-  makeBtn.disabled = true;
-  downloadBtn.disabled = true;
-  printBtn.disabled = true;
-
-  // Save always locked unless unlocked + output exists
-  saveBtn.disabled = true;
-
-  // Hide countdown
-  countdownEl.style.display = "none";
-
-  // Optional: reset look defaults
-  // strengthInp.value = 65;
-  // grainInp.value = 35;
-  // datestampSel.value = "on";
+  clusterLayer = L.markerClusterGroup({
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+    disableClusteringAtZoom: 17
+  });
+}
+function fitToBounds(points){
+  if (!mapInstance || points.length === 0) {
+    if (mapInstance) mapInstance.setView([20.5937, 78.9629], 5);
+    return;
+  }
+  const b = L.latLngBounds(points);
+  mapInstance.fitBounds(b, { padding:[30,30] });
 }
 
 /* =========================================================
-   Auto-lock (idle + tab hidden)
+   HARD wipe visuals (prevents old photo flashing)
 ========================================================= */
-let idleTimer = null;
-const IDLE_MS = 60000;
+function wipeAllVisuals(){
+  try{ modal.style.display = "none"; }catch(_){}
+  try{ modalImg.src = ""; }catch(_){}
 
-function resetIdle(){
-  if (!isUnlocked()) return;
-  if (idleTimer) clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    lockNow();
-    alert("Locked due to inactivity.");
-  }, IDLE_MS);
+  try{ thumbs.innerHTML = ""; }catch(_){}
+
+  try{
+    ctxOut.setTransform(1,0,0,1,0,0);
+    ctxOut.clearRect(0,0,out.width,out.height);
+    ctxOut.fillStyle = "#000";
+    ctxOut.fillRect(0,0,out.width,out.height);
+  }catch(_){}
+
+  out.style.display = "none";
+  video.style.display = "block";
+
+  try{ timelineGrid.innerHTML = ""; }catch(_){}
+  try{ mapWrap.style.display = "none"; }catch(_){}
+  try{ clearMapLayers(); }catch(_){}
+
+  captionInp.value = "";
+  peopleInput.value = "";
+  placeLabel.value = "";
+  geoData = null;
+  geoStatus.textContent = "GPS: not captured";
+
+  shots = [];
+  makeBtn.disabled = true;
+  downloadBtn.disabled = true;
+  printBtn.disabled = true;
+  saveBtn.disabled = true;
+
+  setMode("camera");
 }
-["click","mousemove","keydown","touchstart","scroll"].forEach(ev => {
-  window.addEventListener(ev, () => resetIdle(), { passive:true });
-});
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden && isUnlocked()){
-    lockNow();
-  }
-});
 
 /* =========================================================
    Camera
@@ -935,6 +1111,16 @@ let stream = null;
 let facingMode = "user";
 let shots = [];
 
+function stopCamera(){
+  try{ if (stream) stream.getTracks().forEach(t => t.stop()); }catch(_){}
+  stream = null;
+  try{ video.srcObject = null; }catch(_){}
+  startBtn.disabled = false;
+  startBtn.textContent = "Start Camera";
+  flipBtn.disabled = true;
+  shootBtn.disabled = true;
+  retakeBtn.disabled = true;
+}
 async function startCamera(){
   if (stream) stream.getTracks().forEach(t => t.stop());
   stream = await navigator.mediaDevices.getUserMedia({
@@ -949,8 +1135,9 @@ async function startCamera(){
   retakeBtn.disabled = false;
   startBtn.textContent = "Camera On";
   startBtn.disabled = true;
-}
 
+  setMode("camera");
+}
 function captureFrame(){
   const c = document.createElement('canvas');
   const w = video.videoWidth, h = video.videoHeight;
@@ -984,16 +1171,9 @@ async function countdown(n=3){
   await sleep(220);
   countdownEl.style.display = "none";
 }
-function resetToCamera(){
-  out.style.display="none";
-  video.style.display="block";
-  downloadBtn.disabled = true;
-  printBtn.disabled = true;
-  saveBtn.disabled = true;
-  setSessionUI();
-}
 async function takeBurst(){
-  resetToCamera();
+  wipeAllVisuals();
+  setMode("camera");
   shots = [];
   renderThumbs();
   makeBtn.disabled = true;
@@ -1004,6 +1184,42 @@ async function takeBurst(){
     renderThumbs();
     await sleep(350);
   }
+  makeBtn.disabled = false;
+}
+
+/* =========================================================
+   Upload 3 photos (locked-only)
+========================================================= */
+async function readFileAsDataURL(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+}
+async function pickUpload3(){
+  if (!isUnlocked()) return;
+  uploadFiles.value = "";
+  uploadFiles.click();
+}
+async function handleUploadFiles(files){
+  if (!isUnlocked()) return;
+  const arr = Array.from(files || []);
+  if (arr.length !== 3){
+    alert("Select exactly 3 photos.");
+    return;
+  }
+  wipeAllVisuals();
+  stopCamera();
+  setMode("upload");
+
+  shots = [];
+  for (const f of arr){
+    const url = await readFileAsDataURL(f);
+    shots.push(url);
+  }
+  renderThumbs();
   makeBtn.disabled = false;
 }
 
@@ -1026,7 +1242,75 @@ async function getGeo(){
 }
 
 /* =========================================================
-   Drawing helpers
+   Geo Picker (manual pin)
+========================================================= */
+let geoPickMap = null;
+let geoPickMarker = null;
+let geoPickLatLng = null;
+
+function openGeoPicker(){
+  if (!isUnlocked()) return;
+
+  geoModal.style.display = "flex";
+
+  if (!geoPickMap){
+    geoPickMap = L.map("geoPickMap", { zoomControl:true }).setView([20.5937, 78.9629], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(geoPickMap);
+
+    geoPickMap.on("click", (e) => {
+      geoPickLatLng = e.latlng;
+      if (!geoPickMarker){
+        geoPickMarker = L.marker(geoPickLatLng).addTo(geoPickMap);
+      } else {
+        geoPickMarker.setLatLng(geoPickLatLng);
+      }
+    });
+  }
+
+  setTimeout(() => geoPickMap.invalidateSize(), 60);
+
+  // If already have geoData, show marker
+  if (geoData && typeof geoData.lat === "number" && typeof geoData.lng === "number"){
+    geoPickLatLng = L.latLng(geoData.lat, geoData.lng);
+    if (!geoPickMarker){
+      geoPickMarker = L.marker(geoPickLatLng).addTo(geoPickMap);
+    } else {
+      geoPickMarker.setLatLng(geoPickLatLng);
+    }
+    geoPickMap.setView(geoPickLatLng, 13);
+  }
+}
+function closeGeoPicker(){
+  geoModal.style.display = "none";
+}
+function clearGeoPick(){
+  geoPickLatLng = null;
+  if (geoPickMarker){
+    try{ geoPickMap.removeLayer(geoPickMarker); }catch(_){}
+    geoPickMarker = null;
+  }
+}
+function saveGeoPick(){
+  if (!geoPickLatLng){
+    geoData = null;
+    geoStatus.textContent = "GPS: not captured";
+    closeGeoPicker();
+    return;
+  }
+  geoData = {
+    lat: +geoPickLatLng.lat.toFixed(6),
+    lng: +geoPickLatLng.lng.toFixed(6),
+    accuracy_m: 0
+  };
+  geoStatus.textContent = `GPS: ${geoData.lat}, ${geoData.lng} (manual pin)`;
+  closeGeoPicker();
+}
+
+/* =========================================================
+   Drawing + Templates
 ========================================================= */
 function addGrain(imageData, amount){
   const d = imageData.data;
@@ -1045,24 +1329,19 @@ function vintageGrade(imageData, strength){
   const s = strength / 100;
   for (let i=0; i<d.length; i+=4){
     let r = d[i], g = d[i+1], b = d[i+2];
-
     r = r + (18 * s);
     g = g + (12 * s);
     b = b + (7  * s);
-
     r = r + (24 * s);
     b = b - (14 * s);
-
     const mid = 128;
     r = mid + (r - mid) * (1 - 0.18*s);
     g = mid + (g - mid) * (1 - 0.18*s);
     b = mid + (b - mid) * (1 - 0.18*s);
-
     const gray = 0.299*r + 0.587*g + 0.114*b;
     r = r*(1-0.22*s) + gray*(0.22*s);
     g = g*(1-0.22*s) + gray*(0.22*s);
     b = b*(1-0.22*s) + gray*(0.22*s);
-
     d[i]   = Math.min(255, Math.max(0, r));
     d[i+1] = Math.min(255, Math.max(0, g));
     d[i+2] = Math.min(255, Math.max(0, b));
@@ -1099,8 +1378,8 @@ function drawCover(ctx, img, x,y,w,h, radius=0){
   ctx.putImageData(addGrain(vintageGrade(data, +strengthInp.value), +grainInp.value), x,y);
   ctx.restore();
 }
-function drawDateStamp(ctx, x, y){
-  const d = new Date();
+function drawDateStamp(ctx, x, y, iso){
+  const d = iso ? new Date(iso) : new Date();
   const stamp = d.toLocaleDateString(undefined, { year:"numeric", month:"2-digit", day:"2-digit" });
   ctx.save();
   ctx.textAlign="right";
@@ -1120,13 +1399,9 @@ async function toImages(dataUrls){
   return imgs;
 }
 
-/* =========================================================
-   Templates
-========================================================= */
-function templateStrip(imgs, caption, withDate){
+function templateStrip(imgs, caption, withDate, iso){
   out.width = 1200; out.height = 2400;
   const W = out.width, H = out.height;
-
   ctxOut.clearRect(0,0,W,H);
   ctxOut.fillStyle = "#fbf6eb";
   ctxOut.fillRect(0,0,W,H);
@@ -1156,19 +1431,18 @@ function templateStrip(imgs, caption, withDate){
   ctxOut.font="400 30px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
   ctxOut.fillText("photo strip", pad-10, top + frameH*3 + gap*2 + 210);
 
-  if (withDate) drawDateStamp(ctxOut, W - pad + 10, H - 140);
+  if (withDate) drawDateStamp(ctxOut, W - pad + 10, H - 140, iso);
 }
-function templatePostcard3(imgs, caption, withDate){
+
+function templatePostcard3(imgs, caption, withDate, iso){
   out.width = 1600; out.height = 1100;
   const W = out.width, H = out.height;
-
   ctxOut.clearRect(0,0,W,H);
   ctxOut.fillStyle="#fbf6eb";
   ctxOut.fillRect(0,0,W,H);
 
   const pad = 70;
   const leftW = Math.floor(W*0.58);
-
   const collageX = pad, collageY = pad, collageW = leftW - pad*1.2, collageH = H - pad*2;
   ctxOut.fillStyle="#ffffff";
   ctxOut.fillRect(collageX-18, collageY-18, collageW+36, collageH+36);
@@ -1183,7 +1457,6 @@ function templatePostcard3(imgs, caption, withDate){
   }
 
   const rightX = leftW + 20;
-
   ctxOut.fillStyle="rgba(26,26,26,.70)";
   ctxOut.font="900 46px ui-serif, Georgia, 'Times New Roman', serif";
   ctxOut.textAlign="left";
@@ -1211,12 +1484,12 @@ function templatePostcard3(imgs, caption, withDate){
     ctxOut.stroke();
   }
 
-  if (withDate) drawDateStamp(ctxOut, W - pad, H - 70);
+  if (withDate) drawDateStamp(ctxOut, W - pad, H - 70, iso);
 }
-function templateFilm3(imgs, caption, withDate){
+
+function templateFilm3(imgs, caption, withDate, iso){
   out.width = 1600; out.height = 2200;
   const W = out.width, H = out.height;
-
   ctxOut.clearRect(0,0,W,H);
   ctxOut.fillStyle="#0f0f0f";
   ctxOut.fillRect(0,0,W,H);
@@ -1270,7 +1543,7 @@ function templateFilm3(imgs, caption, withDate){
   ctxOut.textAlign="left";
   ctxOut.fillText(caption || "—", 90, 92);
 
-  if (withDate) drawDateStamp(ctxOut, W - 90, 92);
+  if (withDate) drawDateStamp(ctxOut, W - 90, 92, iso);
 }
 
 /* =========================================================
@@ -1283,17 +1556,18 @@ async function generate(){
   const caption = captionInp.value.trim();
   const withDate = datestampSel.value === "on";
   const t = templateSel.value;
+  const iso = getMemoryISOFromInput();
 
-  if (t === "strip") templateStrip(imgs, caption, withDate);
-  if (t === "postcard3") templatePostcard3(imgs, caption, withDate);
-  if (t === "film3") templateFilm3(imgs, caption, withDate);
+  if (t === "strip") templateStrip(imgs, caption, withDate, iso);
+  if (t === "postcard3") templatePostcard3(imgs, caption, withDate, iso);
+  if (t === "film3") templateFilm3(imgs, caption, withDate, iso);
 
   out.style.display = "block";
   video.style.display = "none";
   downloadBtn.disabled = false;
   printBtn.disabled = false;
 
-  setSessionUI();
+  setSessionUI(); // enables save if unlocked
 }
 
 /* =========================================================
@@ -1314,25 +1588,8 @@ function printCard(){
 }
 
 /* =========================================================
-   People suggestions (from decrypted events)
+   Save memory (encrypted)
 ========================================================= */
-function buildPeopleSuggestions(allPeople){
-  const unique = Array.from(new Set(allPeople.map(p => p.trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
-  peopleSuggestions.innerHTML = "";
-  unique.slice(0, 18).forEach(name => {
-    const b = document.createElement("button");
-    b.className = "chip";
-    b.type = "button";
-    b.textContent = name;
-    b.onclick = () => {
-      const current = sanitizePeopleInput(peopleInput.value);
-      if (!current.includes(name)) current.push(name);
-      peopleInput.value = current.join(", ");
-    };
-    peopleSuggestions.appendChild(b);
-  });
-}
-
 async function saveMemory(){
   if (!isUnlocked()) return;
   if (out.style.display === "none") return;
@@ -1351,8 +1608,12 @@ async function saveMemory(){
   tctx.drawImage(out, 0, 0, tCanvas.width, tCanvas.height);
   const thumbDataURL = canvasToDataURL(tCanvas, 0.86);
 
+  const memoryISO = getMemoryISOFromInput();
+
   const payload = {
-    createdAt: nowISO(),
+    createdAt: memoryISO,          // timeline position
+    capturedAt: nowISO(),          // when you saved/imported
+    source: captureMode,           // "camera" | "upload"
     template: templateSel.value,
     caption: (captionInp.value || "").trim() || null,
     people,
@@ -1374,20 +1635,15 @@ async function saveMemory(){
   await dbPut(STORE_EVENTS, event);
 
   saveHint.textContent = "Saved to your vault.";
-  await refreshPeopleSources();
 
-  // OPTIONAL: after saving, wipe booth so next user sees clean screen
-  hardResetBoothUI();
+  // wipe booth so next person never sees old image
+  wipeAllVisuals();
 }
 
 /* =========================================================
-   Timeline: decrypt + filter + render
+   Timeline + Map/Heat
 ========================================================= */
-let lastObjectURLs = [];
-function revokeAllObjectURLs(){
-  lastObjectURLs.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
-  lastObjectURLs = [];
-}
+let currentView = "list";
 
 function templateLabel(t){
   if (t === "strip") return "Photo Strip";
@@ -1400,39 +1656,16 @@ async function getMyEventsEncrypted(){
   const all = await dbGetAll(STORE_EVENTS);
   return all.filter(e => e.profileId === activeProfileId);
 }
-
 async function decryptMany(encEvents){
   const outArr = [];
   for (const e of encEvents){
     try{
       const payload = await decryptJSON(sessionKey, e.enc.ivB64, e.enc.ctB64);
-      outArr.push({ id:e.id, profileId:e.profileId, createdAt:e.createdAt, payload });
+      outArr.push({ id:e.id, createdAt:e.createdAt, payload });
     } catch(_){}
   }
   return outArr;
 }
-
-function collectAllPeopleFromDecrypted(items){
-  const all = [];
-  items.forEach(x => (x.payload.people || []).forEach(p => all.push(p)));
-  return all;
-}
-
-async function refreshPeopleSources(){
-  if (!isUnlocked()) { buildPeopleSuggestions([]); return; }
-  const enc = await getMyEventsEncrypted();
-  const dec = await decryptMany(enc);
-  buildPeopleSuggestions(collectAllPeopleFromDecrypted(dec));
-}
-
-/* =========================================================
-   Map + Heat
-========================================================= */
-let currentView = "list";
-let mapInstance = null;
-let clusterLayer = null;
-let heatLayer = null;
-let mapBuilt = false;
 
 function setViewButtonUI(){
   const setDim = (btn, on) => btn.style.opacity = on ? "1" : ".7";
@@ -1441,7 +1674,6 @@ function setViewButtonUI(){
   setDim(viewHeatBtn, currentView === "heat");
 }
 function showListView(){
-  currentView = "list";
   timelineGrid.style.display = "";
   mapWrap.style.display = "none";
   setViewButtonUI();
@@ -1451,38 +1683,8 @@ function showMapWrap(){
   mapWrap.style.display = "";
   setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 60);
 }
-function ensureMap(){
-  if (mapBuilt) return;
-  mapBuilt = true;
-
-  mapInstance = L.map(mapEl, { zoomControl:true }).setView([20.5937, 78.9629], 5);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(mapInstance);
-
-  clusterLayer = L.markerClusterGroup({
-    showCoverageOnHover: false,
-    spiderfyOnMaxZoom: true,
-    disableClusteringAtZoom: 17
-  });
-}
-function clearMapLayers(){
-  if (!mapInstance) return;
-  if (clusterLayer && mapInstance.hasLayer(clusterLayer)) mapInstance.removeLayer(clusterLayer);
-  if (heatLayer && mapInstance.hasLayer(heatLayer)) mapInstance.removeLayer(heatLayer);
-  if (clusterLayer) clusterLayer.clearLayers();
-  heatLayer = null;
-}
-function fitToBounds(points){
-  if (!mapInstance || points.length === 0) {
-    if (mapInstance) mapInstance.setView([20.5937, 78.9629], 5);
-    return;
-  }
-  const b = L.latLngBounds(points);
-  mapInstance.fitBounds(b, { padding:[30,30] });
-}
 function jumpToMemoryInList(targetId){
+  currentView = "list";
   showListView();
   const el = document.querySelector(`[data-card-id="${targetId}"]`);
   if (el){
@@ -1496,11 +1698,7 @@ function buildPins(decryptedItems){
   clearMapLayers();
 
   const gps = decryptedItems.filter(x => x.payload.geo && typeof x.payload.geo.lat === "number" && typeof x.payload.geo.lng === "number");
-
-  if (gps.length === 0){
-    mapInstance.setView([20.5937, 78.9629], 5);
-    return;
-  }
+  if (gps.length === 0){ mapInstance.setView([20.5937, 78.9629], 5); return; }
 
   const bounds = [];
   gps.forEach(x => {
@@ -1537,17 +1735,12 @@ function buildPins(decryptedItems){
   clusterLayer.addTo(mapInstance);
   fitToBounds(bounds);
 }
-
 function buildHeat(decryptedItems){
   ensureMap();
   clearMapLayers();
 
   const gps = decryptedItems.filter(x => x.payload.geo && typeof x.payload.geo.lat === "number" && typeof x.payload.geo.lng === "number");
-
-  if (gps.length === 0){
-    mapInstance.setView([20.5937, 78.9629], 5);
-    return;
-  }
+  if (gps.length === 0){ mapInstance.setView([20.5937, 78.9629], 5); return; }
 
   const pts = [];
   const bounds = [];
@@ -1570,15 +1763,20 @@ function buildHeat(decryptedItems){
 async function refreshTimelineUI(){
   if (!isUnlocked()) return;
 
-  revokeAllObjectURLs();
-
   const encEvents = await getMyEventsEncrypted();
   encEvents.sort((a,b) => (b.createdAt||"").localeCompare(a.createdAt||""));
-  stats.textContent = `${encEvents.length} memories`;
+
+  let approxBytes = 0;
+  for (const e of encEvents){
+    approxBytes += b64ApproxBytes(e.enc?.ivB64 || "");
+    approxBytes += b64ApproxBytes(e.enc?.ctB64 || "");
+  }
+  stats.textContent = `${encEvents.length} memories • ~${fmtBytes(approxBytes)} encrypted`;
 
   const dec = await decryptMany(encEvents);
 
-  const allPeople = collectAllPeopleFromDecrypted(dec);
+  const allPeople = [];
+  dec.forEach(x => (x.payload.people || []).forEach(p => allPeople.push(p)));
   const uniquePeople = Array.from(new Set(allPeople.map(x=>x.trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
   const currentPerson = personFilter.value || "";
   personFilter.innerHTML = `<option value="">All people</option>` + uniquePeople.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
@@ -1586,7 +1784,6 @@ async function refreshTimelineUI(){
 
   const pSel = personFilter.value || "";
   const q = (searchFilter.value || "").trim().toLowerCase();
-
   const filtered = dec.filter(x => {
     const p = x.payload;
     const byPerson = !pSel || (p.people || []).includes(pSel);
@@ -1596,6 +1793,7 @@ async function refreshTimelineUI(){
   });
 
   timelineGrid.innerHTML = "";
+
   if (filtered.length === 0){
     timelineGrid.innerHTML = `
       <div class="tCard" style="max-width:720px;">
@@ -1613,8 +1811,8 @@ async function refreshTimelineUI(){
 
       const whereParts = [];
       if (p.placeLabel) whereParts.push(p.placeLabel);
-      if (p.geo) whereParts.push(`GPS: ${p.geo.lat}, ${p.geo.lng} (±${p.geo.accuracy_m}m)`);
-      whereParts.push(templateLabel(p.template));
+      if (p.geo) whereParts.push(`GPS: ${p.geo.lat}, ${p.geo.lng}${p.geo.accuracy_m ? " (±"+p.geo.accuracy_m+"m)" : ""}`);
+      whereParts.push(`${templateLabel(p.template)} • ${p.source === "upload" ? "Upload" : "Camera"}`);
       const where = whereParts.join(" • ");
 
       const card = document.createElement("div");
@@ -1661,16 +1859,14 @@ async function refreshTimelineUI(){
         setViewButtonUI();
         showMapWrap();
         buildPins(filtered);
-        const target = filtered.find(z => z.id === x.id);
-        if (target && target.payload.geo && mapInstance){
-          mapInstance.setView([target.payload.geo.lat, target.payload.geo.lng], 16);
+        if (p.geo && mapInstance){
+          mapInstance.setView([p.geo.lat, p.geo.lng], 16);
         }
       };
 
       card.querySelector(`[data-del="${x.id}"]`).onclick = async () => {
         await dbDelete(STORE_EVENTS, x.id);
         await refreshTimelineUI();
-        await refreshPeopleSources();
       };
 
       timelineGrid.appendChild(card);
@@ -1734,7 +1930,7 @@ async function listProfiles(){
       </div>
       <div class="meta">Unlock</div>
     `;
-    btn.onclick = () => unlockProfileFlow(p.id, p.name, p.saltB64, p.verifierB64);
+    btn.onclick = () => unlockProfileFlow(p);
     profilesGrid.appendChild(btn);
   });
 
@@ -1744,18 +1940,16 @@ async function listProfiles(){
 function openGate(){
   gate.style.display = "flex";
   createMsg.textContent = "";
+  importMsg.textContent = "";
   newName.value = "";
   newPin.value = "";
   listProfiles();
 }
-function closeGate(){
-  gate.style.display = "none";
-}
+function closeGate(){ gate.style.display = "none"; }
 
 async function createProfile(){
   const name = (newName.value || "").trim();
   const pin = (newPin.value || "").trim();
-
   if (!name){ createMsg.textContent = "Name required."; return; }
   if (!/^\d{4,12}$/.test(pin)){ createMsg.textContent = "PIN must be 4–12 digits."; return; }
 
@@ -1767,8 +1961,9 @@ async function createProfile(){
 
   const salt = randBytes(16);
   const saltB64 = ab2b64(salt.buffer);
+  const iterations = 150000;
 
-  const bits = await deriveBits(pin, saltB64);
+  const bits = await deriveBits(pin, saltB64, iterations);
   const vhash = await sha256(bits);
   const verifierB64 = ab2b64(vhash);
 
@@ -1778,66 +1973,211 @@ async function createProfile(){
     createdAt: nowISO(),
     saltB64,
     verifierB64,
-    iterations: 150000
+    iterations
   };
-
   await dbPut(STORE_PROFILES, profile);
   createMsg.textContent = "Created. Unlock it from the left.";
   await listProfiles();
 }
 
-async function unlockProfileFlow(id, name, saltB64, verifierB64){
-  const pin = prompt(`Enter PIN for ${name}:`);
+async function unlockProfileFlow(p){
+  const pin = prompt(`Enter PIN for ${p.name}:`);
   if (!pin) return;
+  if (!/^\d{4,12}$/.test(pin)){ alert("Invalid PIN format."); return; }
 
-  if (!/^\d{4,12}$/.test(pin)){
-    alert("Invalid PIN format.");
-    return;
-  }
+  wipeAllVisuals();
+  stopCamera();
 
-  const bits = await deriveBits(pin, saltB64);
+  const bits = await deriveBits(pin, p.saltB64, p.iterations || 150000);
   const vhash = await sha256(bits);
   const vB64 = ab2b64(vhash);
 
-  if (vB64 !== verifierB64){
+  if (vB64 !== p.verifierB64){
     alert("Wrong PIN.");
     return;
   }
 
-  // IMPORTANT: wipe booth UI before switching identity
-  hardResetBoothUI();
-
-  sessionKey = await deriveAesKey(pin, saltB64, 150000);
-  activeProfileId = id;
-  activeProfileName = name;
+  sessionKey = await deriveAesKey(pin, p.saltB64, p.iterations || 150000);
+  activeProfileId = p.id;
+  activeProfileName = p.name;
 
   closeGate();
   setSessionUI();
-  resetIdle();
-  await refreshPeopleSources();
 }
 
 function lockNow(){
+  wipeAllVisuals();
+  stopCamera();
+
   activeProfileId = null;
   activeProfileName = null;
   sessionKey = null;
 
-  // CRITICAL: wipe any visible photo/output AND stop camera to prevent frozen frame
-  hardResetBoothUI();
-  stopCamera();
-
-  // force to booth + hide timeline
   showBooth();
   tabTimeline.disabled = true;
   setSessionUI();
 
-  // clear timeline UI
-  timelineGrid.innerHTML = "";
-  mapWrap.style.display = "none";
   currentView = "list";
   setViewButtonUI();
+}
 
-  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+/* =========================================================
+   Export / Import Vault
+========================================================= */
+async function exportActiveVault(){
+  if (!isUnlocked()) return;
+
+  const profile = await dbGet(STORE_PROFILES, activeProfileId);
+  if (!profile) { alert("Profile not found."); return; }
+
+  const encEvents = await getMyEventsEncrypted();
+
+  const payload = {
+    format: "VPB_VAULT_EXPORT_V1",
+    exportedAt: nowISO(),
+    profile: {
+      id: profile.id,
+      name: profile.name,
+      createdAt: profile.createdAt,
+      saltB64: profile.saltB64,
+      verifierB64: profile.verifierB64,
+      iterations: profile.iterations || 150000
+    },
+    events: encEvents.map(e => ({
+      id: e.id,
+      profileId: e.profileId,
+      createdAt: e.createdAt,
+      enc: e.enc
+    }))
+  };
+
+  const json = JSON.stringify(payload);
+  const blob = new Blob([json], { type:"application/json" });
+
+  const fileName = `${safeFileName(profile.name)}_vault_${new Date().toISOString().slice(0,10)}.vpb.json`;
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function pickImportFile(){
+  importMsg.textContent = "";
+  importFile.value = "";
+  importFile.click();
+}
+async function readFileAsText(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result || ""));
+    fr.onerror = () => reject(fr.error);
+    fr.readAsText(file);
+  });
+}
+async function importVaultFromFile(file){
+  try{
+    importMsg.textContent = "Importing…";
+    const txt = await readFileAsText(file);
+    const data = JSON.parse(txt);
+
+    if (!data || data.format !== "VPB_VAULT_EXPORT_V1"){
+      importMsg.textContent = "Invalid file format.";
+      return;
+    }
+    if (!data.profile || !data.profile.name || !data.profile.saltB64 || !data.profile.verifierB64){
+      importMsg.textContent = "Missing profile data.";
+      return;
+    }
+
+    const profiles = await dbGetAll(STORE_PROFILES);
+    const lower = (s)=> String(s||"").toLowerCase();
+    const taken = new Set(profiles.map(p => lower(p.name)));
+
+    const baseName = String(data.profile.name).trim() || "Imported";
+    let finalName = baseName;
+    let k = 1;
+    while (taken.has(lower(finalName))){
+      k++;
+      finalName = `${baseName} (Imported ${k})`;
+    }
+
+    const newProfileId = crypto.randomUUID();
+    const newProfile = {
+      id: newProfileId,
+      name: finalName,
+      createdAt: data.profile.createdAt || nowISO(),
+      saltB64: data.profile.saltB64,
+      verifierB64: data.profile.verifierB64,
+      iterations: data.profile.iterations || 150000,
+      importedAt: nowISO()
+    };
+
+    const existingEvents = await dbGetAll(STORE_EVENTS);
+    const usedEventIds = new Set(existingEvents.map(e => e.id));
+
+    await dbPut(STORE_PROFILES, newProfile);
+
+    const events = Array.isArray(data.events) ? data.events : [];
+    let importedCount = 0;
+
+    for (const e of events){
+      if (!e || !e.enc || !e.enc.ivB64 || !e.enc.ctB64) continue;
+
+      let newEventId = (typeof e.id === "string" && e.id) ? e.id : crypto.randomUUID();
+      while (usedEventIds.has(newEventId)) newEventId = crypto.randomUUID();
+      usedEventIds.add(newEventId);
+
+      const rec = {
+        id: newEventId,
+        profileId: newProfileId,
+        createdAt: e.createdAt || nowISO(),
+        enc: { ivB64: e.enc.ivB64, ctB64: e.enc.ctB64 }
+      };
+      await dbPut(STORE_EVENTS, rec);
+      importedCount++;
+    }
+
+    importMsg.textContent = `Imported: ${finalName} • ${importedCount} memories`;
+    await listProfiles();
+
+  } catch (_){
+    importMsg.textContent = "Import failed.";
+  }
+}
+
+/* =========================================================
+   People suggestions (per vault)
+========================================================= */
+function buildPeopleSuggestions(allPeople){
+  const unique = Array.from(new Set(allPeople.map(p => p.trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  peopleSuggestions.innerHTML = "";
+  unique.slice(0, 18).forEach(name => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.textContent = name;
+    b.onclick = () => {
+      const current = sanitizePeopleInput(peopleInput.value);
+      if (!current.includes(name)) current.push(name);
+      peopleInput.value = current.join(", ");
+    };
+    peopleSuggestions.appendChild(b);
+  });
+}
+async function refreshPeopleSources(){
+  if (!isUnlocked()){
+    peopleSuggestions.innerHTML = "";
+    return;
+  }
+  const encEvents = await getMyEventsEncrypted();
+  const dec = await decryptMany(encEvents);
+  const all = [];
+  dec.forEach(x => (x.payload.people || []).forEach(p => all.push(p)));
+  buildPeopleSuggestions(all);
 }
 
 /* =========================================================
@@ -1854,7 +2194,14 @@ flipBtn.onclick = async () => {
   await startCamera();
 };
 shootBtn.onclick = async () => { await takeBurst(); };
-retakeBtn.onclick = async () => { await takeBurst(); };
+uploadBtn.onclick = async () => { await pickUpload3(); };
+uploadFiles.onchange = async () => {
+  const fs = uploadFiles.files;
+  if (!fs || fs.length === 0) return;
+  await handleUploadFiles(fs);
+};
+
+retakeBtn.onclick = () => { wipeAllVisuals(); setSessionUI(); };
 makeBtn.onclick = async () => { await generate(); };
 downloadBtn.onclick = download;
 printBtn.onclick = printCard;
@@ -1870,12 +2217,19 @@ geoBtn.onclick = async () => {
   }
 };
 
+pickOnMapBtn.onclick = () => openGeoPicker();
+geoPickClose.onclick = () => closeGeoPicker();
+geoPickClear.onclick = () => clearGeoPick();
+geoPickSave.onclick = () => saveGeoPick();
+geoModal.onclick = (e) => { if (e.target === geoModal) closeGeoPicker(); };
+
 saveBtn.onclick = async () => {
   if (!isUnlocked()) return;
   saveBtn.disabled = true;
   await saveMemory();
+  await refreshPeopleSources();
   saveBtn.disabled = false;
-  resetIdle();
+  setSessionUI();
 };
 
 viewListBtn.onclick = async () => { currentView = "list"; setViewButtonUI(); await refreshTimelineUI(); };
@@ -1885,6 +2239,8 @@ viewHeatBtn.onclick = async () => { currentView = "heat"; setViewButtonUI(); awa
 refreshTimeline.onclick = async () => { if (isUnlocked()) await refreshTimelineUI(); };
 personFilter.onchange = async () => { if (isUnlocked()) await refreshTimelineUI(); };
 searchFilter.oninput = async () => { if (isUnlocked()) await refreshTimelineUI(); };
+
+exportMyVaultBtn.onclick = async () => { await exportActiveVault(); };
 
 clearAll.onclick = async () => {
   if (!isUnlocked()) return;
@@ -1898,34 +2254,45 @@ clearAll.onclick = async () => {
 modalClose.onclick = () => { modal.style.display = "none"; };
 modal.onclick = (e) => { if (e.target === modal) modal.style.display = "none"; };
 
-// Switch profile MUST reset booth before showing gate
+// switch profile = wipe + stop + open gate
 switchProfileBtn.onclick = () => {
-  hardResetBoothUI();
+  wipeAllVisuals();
+  stopCamera();
   openGate();
 };
 
 lockBtn.onclick = () => lockNow();
 
-// Continue as Guest MUST lock + reset everything
+// guest = wipe + stop + clear session + close gate
 gateClose.onclick = () => {
-  lockNow();
+  wipeAllVisuals();
+  stopCamera();
+  activeProfileId = null;
+  activeProfileName = null;
+  sessionKey = null;
+  tabTimeline.disabled = true;
+  showBooth();
+  setSessionUI();
   closeGate();
 };
 
 createProfileBtn.onclick = async () => { await createProfile(); };
+
+importVaultBtn.onclick = () => pickImportFile();
+importFile.onchange = async () => {
+  const f = importFile.files && importFile.files[0];
+  if (!f) return;
+  await importVaultFromFile(f);
+};
 
 /* =========================================================
    Boot
 ========================================================= */
 (async function init(){
   setViewButtonUI();
-  setSessionUI();
-
-  // Start clean
-  hardResetBoothUI();
+  wipeAllVisuals();
   stopCamera();
-
-  // Gate first
+  setSessionUI();
   openGate();
 })();
 </script>
