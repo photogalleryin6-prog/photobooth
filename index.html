@@ -22,6 +22,7 @@
       --radius: 18px;
       --line: rgba(0,0,0,.10);
       --danger:#b91c1c;
+      --ok:#166534;
     }
     *{box-sizing:border-box}
     body{
@@ -251,7 +252,27 @@
       color:rgba(26,26,26,.80);
     }
     .tActions{margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;}
-    .tActions button{padding:10px 12px; font-size:13px; border-radius:12px;}
+     .tActions button{padding:10px 12px; font-size:13px; border-radius:12px;}
+    .selWrap{position:absolute; top:10px; right:10px; display:flex; gap:8px; align-items:center;}
+    .selWrap label{font-size:12px; color:rgba(0,0,0,.65); font-weight:800;}
+    .selWrap input[type="checkbox"]{width:18px;height:18px; accent-color: var(--accent); cursor:pointer;}
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid rgba(0,0,0,.10);
+      background:rgba(255,255,255,.72);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:rgba(0,0,0,.72);
+      margin-top:10px;
+    }
+    .badge .bDot{
+      width:9px;height:9px;border-radius:999px;background:var(--ok);
+      box-shadow:0 6px 14px rgba(0,0,0,.10);
+    }
 
     .timelineRail{position:relative; padding-left:34px;}
     .timelineRail::before{
@@ -540,6 +561,15 @@
             </select>
             <input id="searchFilter" placeholder="Search place / caption" />
 
+            <!-- NEW: import a shared memory into CURRENT unlocked profile -->
+            <button id="importMemoryBtn" class="mutedBtn">Import Memory</button>
+
+            <!-- NEW: multi-select export -->
+            <button id="selectModeBtn" class="mutedBtn">Select</button>
+            <button id="selectAllBtn" class="mutedBtn" disabled>Select All</button>
+            <button id="clearSelectionBtn" class="mutedBtn" disabled>Clear</button>
+            <button id="exportSelectedBtn" class="mutedBtn" disabled>Export Selected</button>
+
             <button id="exportMyVaultBtn" class="mutedBtn">Export Vault</button>
             <button id="refreshTimeline" class="mutedBtn">Refresh</button>
             <button id="clearAll" class="dangerBtn">Clear My Vault</button>
@@ -653,6 +683,9 @@
   <input id="importFile" type="file" accept=".json,application/json" style="display:none" />
   <input id="uploadFiles" type="file" accept="image/*" multiple style="display:none" />
 
+  <!-- NEW: import a single shared memory into current profile -->
+  <input id="importMemoryFile" type="file" accept=".json,application/json" style="display:none" />
+
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -666,7 +699,7 @@
    DB (IndexedDB)
 ========================================================= */
 const DB_NAME = "vintage_photobooth_db";
-const DB_VER  = 2;
+const DB_VER  = 3; // bumped for forward-compat; schema unchanged
 const STORE_EVENTS   = "events";   // encrypted memories
 const STORE_PROFILES = "profiles"; // profile metadata
 
@@ -936,6 +969,16 @@ const clearAll = document.getElementById("clearAll");
 const timelineGrid = document.getElementById("timelineGrid");
 const stats = document.getElementById("stats");
 
+/* NEW: Import memory button + input */
+const importMemoryBtn = document.getElementById("importMemoryBtn");
+const importMemoryFile = document.getElementById("importMemoryFile");
+
+/* NEW: Multi-select export refs */
+const selectModeBtn = document.getElementById("selectModeBtn");
+const selectAllBtn = document.getElementById("selectAllBtn");
+const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+const exportSelectedBtn = document.getElementById("exportSelectedBtn");
+
 /* Modal */
 const modal = document.getElementById("modal");
 const modalTitle = document.getElementById("modalTitle");
@@ -1001,7 +1044,7 @@ function setSessionUI(){
     lockBtn.style.display = "";
     tabTimeline.disabled = false;
 
-    uploadBtn.disabled = false;            // upload allowed only when unlocked
+    uploadBtn.disabled = false;
     pickOnMapBtn.disabled = false;
 
     saveBtn.disabled = (out.style.display === "none") ? true : false;
@@ -1013,13 +1056,14 @@ function setSessionUI(){
     lockBtn.style.display = "none";
     tabTimeline.disabled = true;
 
-    uploadBtn.disabled = true;             // lock upload in guest
+    uploadBtn.disabled = true;
     pickOnMapBtn.disabled = true;
 
     saveBtn.disabled = true;
     saveBtn.textContent = "Save to Timeline (Locked)";
     saveHint.textContent = "Generate output first. Then unlock to save.";
   }
+  setSelectionButtonsUI();
 }
 
 /* =========================================================
@@ -1272,7 +1316,6 @@ function openGeoPicker(){
 
   setTimeout(() => geoPickMap.invalidateSize(), 60);
 
-  // If already have geoData, show marker
   if (geoData && typeof geoData.lat === "number" && typeof geoData.lng === "number"){
     geoPickLatLng = L.latLng(geoData.lat, geoData.lng);
     if (!geoPickMarker){
@@ -1567,7 +1610,7 @@ async function generate(){
   downloadBtn.disabled = false;
   printBtn.disabled = false;
 
-  setSessionUI(); // enables save if unlocked
+  setSessionUI();
 }
 
 /* =========================================================
@@ -1611,9 +1654,9 @@ async function saveMemory(){
   const memoryISO = getMemoryISOFromInput();
 
   const payload = {
-    createdAt: memoryISO,          // timeline position
-    capturedAt: nowISO(),          // when you saved/imported
-    source: captureMode,           // "camera" | "upload"
+    createdAt: memoryISO,
+    capturedAt: nowISO(),
+    source: captureMode,
     template: templateSel.value,
     caption: (captionInp.value || "").trim() || null,
     people,
@@ -1629,14 +1672,14 @@ async function saveMemory(){
     id: crypto.randomUUID(),
     profileId: activeProfileId,
     createdAt: payload.createdAt,
-    enc
+    enc,
+    meta: null
   };
 
   await dbPut(STORE_EVENTS, event);
 
   saveHint.textContent = "Saved to your vault.";
 
-  // wipe booth so next person never sees old image
   wipeAllVisuals();
 }
 
@@ -1644,6 +1687,88 @@ async function saveMemory(){
    Timeline + Map/Heat
 ========================================================= */
 let currentView = "list";
+
+/* =========================================================
+   NEW: Multi-select export (timeline)
+========================================================= */
+let selectionMode = false;
+let selectedIds = new Set();
+let lastFilteredIds = [];
+
+function setSelectionButtonsUI(){
+  const any = selectedIds.size > 0;
+  if (typeof selectAllBtn !== "undefined") selectAllBtn.disabled = !selectionMode || lastFilteredIds.length === 0;
+  if (typeof clearSelectionBtn !== "undefined") clearSelectionBtn.disabled = !selectionMode || !any;
+  if (typeof exportSelectedBtn !== "undefined") exportSelectedBtn.disabled = !selectionMode || !any;
+  if (typeof selectModeBtn !== "undefined") selectModeBtn.textContent = selectionMode ? "Done" : "Select";
+}
+
+function toggleSelectionMode(){
+  selectionMode = !selectionMode;
+  if (!selectionMode) selectedIds.clear();
+  setSelectionButtonsUI();
+}
+
+function selectAllFiltered(){
+  if (!selectionMode) return;
+  lastFilteredIds.forEach(id => selectedIds.add(id));
+  setSelectionButtonsUI();
+}
+
+function clearSelection(){
+  selectedIds.clear();
+  setSelectionButtonsUI();
+}
+
+async function exportSelectedMemories(){
+  if (!isUnlocked()) return;
+  if (!selectionMode || selectedIds.size === 0) return;
+
+  const ids = Array.from(selectedIds);
+  const memories = [];
+
+  for (const id of ids){
+    const e = await dbGet(STORE_EVENTS, id);
+    if (!e) continue;
+    if (e.profileId !== activeProfileId) continue;
+    if (!e.enc || !e.enc.ivB64 || !e.enc.ctB64) continue;
+
+    // Decrypt on this device, then export plaintext payload so it can be re-encrypted on import.
+    try{
+      const payload = await decryptJSON(sessionKey, e.enc.ivB64, e.enc.ctB64);
+      memories.push(payload);
+    } catch(_){ /* skip */ }
+  }
+
+  if (memories.length === 0){
+    alert("No valid memories selected.");
+    return;
+  }
+
+  const payload = {
+    format: "VPB_MEMORY_BUNDLE_EXPORT_V2",
+    exportedAt: nowISO(),
+    sharedByName: activeProfileName || "Unknown",
+    count: memories.length,
+    memories
+  };
+
+  const json = JSON.stringify(payload);
+  const blob = new Blob([json], { type:"application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const fileName = `${safeFileName(activeProfileName)}_memories_${new Date().toISOString().slice(0,10)}.vpb.memories.json`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+  selectedIds.clear();
+  setSelectionButtonsUI();
+  await refreshTimelineUI();
+}
 
 function templateLabel(t){
   if (t === "strip") return "Photo Strip";
@@ -1658,14 +1783,25 @@ async function getMyEventsEncrypted(){
 }
 async function decryptMany(encEvents){
   const outArr = [];
+  let failed = 0;
+
   for (const e of encEvents){
     try{
       const payload = await decryptJSON(sessionKey, e.enc.ivB64, e.enc.ctB64);
-      outArr.push({ id:e.id, createdAt:e.createdAt, payload });
-    } catch(_){}
+      outArr.push({ id:e.id, createdAt:e.createdAt, payload, meta: e.meta || null });
+    } catch(_){
+      failed++;
+    }
   }
+
+  if (failed > 0){
+    // shows in footer stats area
+    stats.textContent = `${encEvents.length} memories • ${failed} failed to decrypt`;
+  }
+
   return outArr;
 }
+
 
 function setViewButtonUI(){
   const setDim = (btn, on) => btn.style.opacity = on ? "1" : ".7";
@@ -1792,6 +1928,10 @@ async function refreshTimelineUI(){
     return byPerson && bySearch;
   });
 
+  // NEW: track filtered IDs for Select All
+  lastFilteredIds = filtered.map(x => x.id);
+  setSelectionButtonsUI();
+
   timelineGrid.innerHTML = "";
 
   if (filtered.length === 0){
@@ -1815,17 +1955,29 @@ async function refreshTimelineUI(){
       whereParts.push(`${templateLabel(p.template)} • ${p.source === "upload" ? "Upload" : "Camera"}`);
       const where = whereParts.join(" • ");
 
+      const sharedBadgeHtml = (x.meta && x.meta.sharedByName)
+        ? `<div class="badge"><span class="bDot"></span><span>Shared by ${escapeHtml(x.meta.sharedByName)}${x.meta.sharedAt ? " • " + escapeHtml(fmtDateTime(x.meta.sharedAt)) : ""}</span></div>`
+        : ``;
+
       const card = document.createElement("div");
       card.className = "tCard";
       card.setAttribute("data-card-id", x.id);
+
+      const selHtml = selectionMode ? `
+              <div class="selWrap">
+                <label>Select</label>
+                <input type="checkbox" data-sel="${x.id}" ${selectedIds.has(x.id) ? "checked" : ""} />
+              </div>` : ``;
 
       card.innerHTML = `
         <div class="tInner">
           <div class="tThumb"><img src="${p.thumbDataURL}" alt="thumb"/></div>
           <div class="tBody">
+            ${selHtml}
             <div>
               <div class="tWhen">${escapeHtml(when)}</div>
               <div class="tWhere">${escapeHtml(where || "—")}</div>
+              ${sharedBadgeHtml}
             </div>
 
             <div class="tPeople">
@@ -1835,6 +1987,7 @@ async function refreshTimelineUI(){
             <div class="tActions">
               <button class="mutedBtn" data-open="${x.id}">Open</button>
               <button class="mutedBtn" data-dl="${x.id}">Download</button>
+              <button class="mutedBtn" data-share="${x.id}">Share</button>
               ${p.geo ? `<button class="mutedBtn" data-map="${x.id}">Map</button>` : ``}
               <button class="dangerBtn" data-del="${x.id}">Delete</button>
             </div>
@@ -1853,6 +2006,10 @@ async function refreshTimelineUI(){
         a.href = p.finalDataURL;
         a.click();
       };
+      card.querySelector(`[data-share="${x.id}"]`).onclick = async () => {
+        await exportSingleMemory(x.id);
+      };
+
       const mapBtn = card.querySelector(`[data-map="${x.id}"]`);
       if (mapBtn) mapBtn.onclick = async () => {
         currentView = "pins";
@@ -1868,6 +2025,16 @@ async function refreshTimelineUI(){
         await dbDelete(STORE_EVENTS, x.id);
         await refreshTimelineUI();
       };
+
+      // NEW: selection handling
+      const sel = card.querySelector(`[data-sel="${x.id}"]`);
+      if (sel){
+        sel.onchange = () => {
+          if (sel.checked) selectedIds.add(x.id);
+          else selectedIds.delete(x.id);
+          setSelectionButtonsUI();
+        };
+      }
 
       timelineGrid.appendChild(card);
     });
@@ -2003,6 +2170,7 @@ async function unlockProfileFlow(p){
 
   closeGate();
   setSessionUI();
+  await refreshPeopleSources();
 }
 
 function lockNow(){
@@ -2022,7 +2190,7 @@ function lockNow(){
 }
 
 /* =========================================================
-   Export / Import Vault
+   Export / Import Vault (whole profile) - unchanged
 ========================================================= */
 async function exportActiveVault(){
   if (!isUnlocked()) return;
@@ -2047,7 +2215,8 @@ async function exportActiveVault(){
       id: e.id,
       profileId: e.profileId,
       createdAt: e.createdAt,
-      enc: e.enc
+      enc: e.enc,
+      meta: e.meta || null
     }))
   };
 
@@ -2135,7 +2304,8 @@ async function importVaultFromFile(file){
         id: newEventId,
         profileId: newProfileId,
         createdAt: e.createdAt || nowISO(),
-        enc: { ivB64: e.enc.ivB64, ctB64: e.enc.ctB64 }
+        enc: { ivB64: e.enc.ivB64, ctB64: e.enc.ctB64 },
+        meta: e.meta || null
       };
       await dbPut(STORE_EVENTS, rec);
       importedCount++;
@@ -2150,7 +2320,127 @@ async function importVaultFromFile(file){
 }
 
 /* =========================================================
+   NEW: Share single memory (export) + Import into current profile
+========================================================= */
+async function exportSingleMemory(eventId){
+  if (!isUnlocked()) return;
+
+  const e = await dbGet(STORE_EVENTS, eventId);
+  if (!e) { alert("Memory not found."); return; }
+  if (e.profileId !== activeProfileId) { alert("Not in your active vault."); return; }
+  if (!e.enc || !e.enc.ivB64 || !e.enc.ctB64) { alert("Corrupt memory."); return; }
+
+  // ✅ Decrypt using sender's session key (works only while sender is unlocked)
+  let plain;
+  try{
+    plain = await decryptJSON(sessionKey, e.enc.ivB64, e.enc.ctB64);
+  } catch(_){
+    alert("Unable to decrypt this memory in current session.");
+    return;
+  }
+
+  // ✅ Export plaintext so receiver can re-encrypt into THEIR vault
+  const payload = {
+    format: "VPB_MEMORY_EXPORT_V2",
+    exportedAt: nowISO(),
+    sharedByName: activeProfileName || "Unknown",
+    memory: {
+      createdAt: plain.createdAt || e.createdAt || nowISO(),
+      payload: plain
+    }
+  };
+
+  const json = JSON.stringify(payload);
+  const blob = new Blob([json], { type:"application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const fileName = `${safeFileName(activeProfileName)}_memory_${String(e.createdAt||nowISO()).slice(0,10)}.vpb.memory.json`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+
+function pickImportMemoryFile(){
+  if (!isUnlocked()) return;
+  importMemoryFile.value = "";
+  importMemoryFile.click();
+}
+
+async function importSingleMemoryIntoActiveProfile(file){
+  if (!isUnlocked()) return;
+
+  try{
+    const txt = await readFileAsText(file);
+    const data = JSON.parse(txt);
+
+    const isSingle = data && data.format === "VPB_MEMORY_EXPORT_V2";
+    const isBundle = data && data.format === "VPB_MEMORY_BUNDLE_EXPORT_V2";
+
+    if (!isSingle && !isBundle){
+      alert("Invalid memory file.");
+      return;
+    }
+
+    const sharedByName = (data.sharedByName || "").trim() || "Unknown";
+    const sharedAt = data.exportedAt || nowISO();
+
+    const items = isSingle
+      ? [data.memory]
+      : (Array.isArray(data.memories) ? data.memories : []);
+
+    const valid = items.filter(p => p && p.finalDataURL && p.thumbDataURL);
+    if (valid.length === 0){
+      alert("Invalid memory payload.");
+      return;
+    }
+
+    const existingEvents = await dbGetAll(STORE_EVENTS);
+    const usedEventIds = new Set(existingEvents.map(e => e.id));
+
+    let imported = 0;
+
+    for (const payload of valid){
+      const enc = await encryptJSON(sessionKey, payload);
+
+      let newEventId = crypto.randomUUID();
+      while (usedEventIds.has(newEventId)) newEventId = crypto.randomUUID();
+      usedEventIds.add(newEventId);
+
+      const rec = {
+        id: newEventId,
+        profileId: activeProfileId,
+        createdAt: payload.createdAt || nowISO(),
+        enc,
+        meta: {
+          sharedByName,
+          sharedAt,
+          importedAt: nowISO(),
+          type: "imported_memory"
+        }
+      };
+
+      await dbPut(STORE_EVENTS, rec);
+      imported++;
+    }
+
+    await refreshTimelineUI();
+    await refreshPeopleSources();
+
+    alert(`Imported ${imported} memory${imported===1?"":"ies"} into ${activeProfileName}. Shared by ${sharedByName}.`);
+  } catch(_){
+    alert("Import failed.");
+  }
+}
+
+
+/* =========================================================
    People suggestions (per vault)
+========================================================= */
+/* (per vault)
 ========================================================= */
 function buildPeopleSuggestions(allPeople){
   const unique = Array.from(new Set(allPeople.map(p => p.trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
@@ -2283,6 +2573,20 @@ importFile.onchange = async () => {
   const f = importFile.files && importFile.files[0];
   if (!f) return;
   await importVaultFromFile(f);
+};
+
+/* NEW: multi-select export */
+selectModeBtn.onclick = async () => { toggleSelectionMode(); await refreshTimelineUI(); };
+selectAllBtn.onclick = async () => { selectAllFiltered(); await refreshTimelineUI(); };
+clearSelectionBtn.onclick = async () => { clearSelection(); await refreshTimelineUI(); };
+exportSelectedBtn.onclick = async () => { await exportSelectedMemories(); };
+
+/* NEW: import shared memory into current unlocked profile */
+importMemoryBtn.onclick = () => pickImportMemoryFile();
+importMemoryFile.onchange = async () => {
+  const f = importMemoryFile.files && importMemoryFile.files[0];
+  if (!f) return;
+  await importSingleMemoryIntoActiveProfile(f);
 };
 
 /* =========================================================
